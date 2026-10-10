@@ -1,0 +1,13 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+db.sqlite3
+staticfiles/
+*.egg-info/
+
+.idea/
+fix_docx.*
+remove_comments.*
+make_commits.*
