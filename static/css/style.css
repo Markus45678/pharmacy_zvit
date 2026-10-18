@@ -1,0 +1,9 @@
+.badge-pill-custom {
+    border-radius: 20px;
+    padding: 5px 12px;
+    font-weight: 600;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 83, 155, 0.02);
+}
