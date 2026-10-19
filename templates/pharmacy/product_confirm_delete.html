@@ -1,0 +1,2 @@
+{% extends 'pharmacy/base.html' %}
+{% block content %}<div class="container py-4"><div class="card card-custom p-4"><h1 class="h3">Видалити {{ object.name }}?</h1><form method="post">{% csrf_token %}<button class="btn btn-danger">Видалити</button> <a class="btn btn-outline-secondary" href="{{ object.get_absolute_url }}">Скасувати</a></form></div></div>{% endblock %}

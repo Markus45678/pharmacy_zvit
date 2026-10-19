@@ -1,0 +1,3 @@
+{% extends 'pharmacy/base.html' %}
+{% block title %}{{ product.name }} | PharmManager{% endblock %}
+{% block content %}<div class="container py-4"><h1>{{ product.name }}</h1><p>{{ product.description }}</p><dl><dt>Категорія</dt><dd>{{ product.category }}</dd><dt>Ціна</dt><dd>{{ product.price }} грн</dd><dt>Залишок</dt><dd>{{ product.stock_quantity }} шт.</dd></dl>{% if user == product.created_by %}<a class="btn btn-primary" href="{% url 'pharmacy:product_update' product.pk %}">Редагувати</a> <a class="btn btn-danger" href="{% url 'pharmacy:product_delete' product.pk %}">Видалити</a>{% endif %}</div>{% endblock %}
