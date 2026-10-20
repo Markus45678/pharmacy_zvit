@@ -1,0 +1,508 @@
+{% extends "pharmacy/base.html" %}
+
+{% block title %}Керування аптечним складом | PharmManager{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-lg-4 py-4">
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h3 class="fw-bold text-dark mb-1">
+                <i class="bi bi-boxes text-primary me-2"></i>Панель керування складом
+            </h3>
+            <p class="text-muted small mb-0">Складський облік медикаментів, рух товару та списання</p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#addMedModal">
+                <i class="bi bi-plus-circle me-1"></i> Додати препарат
+            </button>
+            <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#sellMedModal">
+                <i class="bi bi-cart-dash me-1"></i> Продаж
+            </button>
+            <button type="button" class="btn btn-outline-success btn-sm rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#returnMedModal">
+                <i class="bi bi-arrow-return-left me-1"></i> Повернення
+            </button>
+            <button type="button" class="btn btn-outline-danger btn-sm rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#deleteExpiredModal">
+                <i class="bi bi-trash3 me-1"></i> Списати прострочені
+                {% if expired_count > 0 %}
+                <span class="badge bg-danger rounded-pill ms-1">{{ expired_count }}</span>
+                {% endif %}
+            </button>
+            <a href="{% url 'admin:index' %}" target="_blank" class="btn btn-dark btn-sm rounded-pill px-3">
+                <i class="bi bi-gear me-1"></i> Адмінка Django
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-lg-3">
+            <div class="card card-custom p-3 border-0 border-start border-4 border-primary">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-muted small fw-semibold text-uppercase">Всього найменувань</div>
+                        <h3 class="fw-bold text-dark mb-0 mt-1">{{ total_med_types }}</h3>
+                    </div>
+                    <div class="rounded-circle bg-primary bg-opacity-10 p-3 text-primary fs-4">
+                        <i class="bi bi-capsule"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-6 col-lg-3">
+            <div class="card card-custom p-3 border-0 border-start border-4 border-success">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-muted small fw-semibold text-uppercase">Упаковок на складі</div>
+                        <h3 class="fw-bold text-success mb-0 mt-1">{{ total_stock_count }} <small class="fs-6 text-muted">шт</small></h3>
+                    </div>
+                    <div class="rounded-circle bg-success bg-opacity-10 p-3 text-success fs-4">
+                        <i class="bi bi-box-seam"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-6 col-lg-3">
+            <div class="card card-custom p-3 border-0 border-start border-4 border-warning">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-muted small fw-semibold text-uppercase">Закінчуються (< 5 шт)</div>
+                        <h3 class="fw-bold text-warning-emphasis mb-0 mt-1">{{ low_stock_count }}</h3>
+                    </div>
+                    <div class="rounded-circle bg-warning bg-opacity-10 p-3 text-warning-emphasis fs-4">
+                        <i class="bi bi-exclamation-triangle"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-6 col-lg-3">
+            <div class="card card-custom p-3 border-0 border-start border-4 border-danger">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-muted small fw-semibold text-uppercase">Прострочені товари</div>
+                        <h3 class="fw-bold text-danger mb-0 mt-1">{{ expired_count }}</h3>
+                    </div>
+                    <div class="rounded-circle bg-danger bg-opacity-10 p-3 text-danger fs-4">
+                        <i class="bi bi-calendar-x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card card-custom border-0 shadow-sm overflow-hidden mb-4">
+        
+        <div class="card-header bg-white border-bottom p-3">
+            <ul class="nav nav-pills gap-2" id="warehouseTabs" role="tablist">
+                <li class="nav-item">
+                    <button class="nav-link active rounded-pill px-3 py-2 fw-semibold" id="stock-tab" data-bs-toggle="pill" data-bs-target="#stockTabContent">
+                        <i class="bi bi-table me-1"></i> Склад препаратів ({{ medicines|length }})
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link rounded-pill px-3 py-2 fw-semibold" id="movements-tab" data-bs-toggle="pill" data-bs-target="#movementsTabContent">
+                        <i class="bi bi-journal-text me-1"></i> Журнал руху товарів
+                    </button>
+                </li>
+            </ul>
+        </div>
+
+        <div class="tab-content" id="warehouseTabsContent">
+            
+            <div class="tab-pane fade show active p-3 p-lg-4" id="stockTabContent">
+                
+                <div class="row g-3 align-items-center mb-3">
+                    <div class="col-md-5">
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                            <input type="text" id="tableSearch" class="form-control border-start-0 ps-0" placeholder="Швидкий фільтр за назвою або категорією..." onkeyup="filterTable()">
+                        </div>
+                    </div>
+                    <div class="col-md-7 text-md-end text-muted small">
+                        <span>Показано позицій: <strong id="rowCount">{{ medicines|length }}</strong></span>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="stockTable">
+                        <thead class="table-light text-secondary small text-uppercase">
+                            <tr>
+                                <th style="width: 50px;">#</th>
+                                <th>Назва препарату</th>
+                                <th>Категорія</th>
+                                <th>Відпуск</th>
+                                <th>Ціна</th>
+                                <th>Залишок на складі</th>
+                                <th>Термін придатності</th>
+                                <th class="text-end" style="width: 140px;">Дії</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for med in medicines %}
+                            <tr>
+                                <td class="text-muted small">{{ forloop.counter }}</td>
+                                <td>
+                                    <strong class="text-dark">{{ med.name }}</strong>
+                                    <div class="small text-muted">{{ med.dosage_form }}</div>
+                                </td>
+                                <td>
+                                    <span class="badge" style="background-color: {{ med.category.bg_color|default:'#F1F5F9' }}; color: {{ med.category.color|default:'#0F172A' }};">
+                                        <i class="bi {{ med.category.icon }} me-1"></i>{{ med.category.name }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if med.rx_required %}
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">За рецептом</span>
+                                    {% else %}
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">Без рецепту</span>
+                                    {% endif %}
+                                </td>
+                                <td><strong>{{ med.price|floatformat:2 }} грн</strong></td>
+                                <td>
+                                    {% if med.total_stock == 0 %}
+                                        <span class="badge bg-danger text-white badge-pill-custom">0 шт (Немає)</span>
+                                    {% elif med.total_stock < 5 %}
+                                        <span class="badge bg-warning text-dark badge-pill-custom">{{ med.total_stock }} шт (Закінчується)</span>
+                                    {% else %}
+                                        <span class="badge bg-success text-white badge-pill-custom">{{ med.total_stock }} шт</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if med.earliest_expiry %}
+                                        {% if med.is_expired %}
+                                            <span class="text-danger fw-bold"><i class="bi bi-x-circle me-1"></i>{{ med.earliest_expiry|date:"d.m.Y" }} (Прострочено!)</span>
+                                        {% else %}
+                                            <span class="text-muted"><i class="bi bi-calendar-check me-1"></i>до {{ med.earliest_expiry|date:"d.m.Y" }}</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <div class="btn-group btn-group-sm">
+                                        <button type="button" class="btn btn-outline-primary" title="Редагувати"
+                                                onclick="openEditModal('{{ med.id }}', '{{ med.name|escapejs }}', '{{ med.total_stock }}', '{{ med.earliest_expiry|date:"d.m.Y"|default:"" }}', '{{ med.price|floatformat:2 }}')">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <form method="post" action="{% url 'pharmacy:warehouse_delete_product' med.id %}" class="d-inline" onsubmit="return confirm('Видалити препарат {{ med.name }} зі складу?');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-outline-danger" title="Видалити">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="8" class="text-center py-4 text-muted">
+                                    <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+                                    Склад порожній. Додайте перший препарат за допомогою кнопки зверху!
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+
+            <div class="tab-pane fade p-3 p-lg-4" id="movementsTabContent">
+                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-clock-history me-1 text-primary"></i> Журнал замовлень та продажів (inventory_order)</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light text-secondary small text-uppercase">
+                            <tr>
+                                <th># Замовлення</th>
+                                <th>Час операції</th>
+                                <th>Створив (User)</th>
+                                <th>Товари в чеку</th>
+                                <th>Сума (грн)</th>
+                                <th>Статус</th>
+                                <th>Списано</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ord in recent_orders %}
+                            <tr>
+                                <td><strong>#{{ ord.id }}</strong></td>
+                                <td class="small text-muted">{{ ord.created_at|date:"d.m.Y H:i:s" }}</td>
+                                <td class="small"><i class="bi bi-person me-1"></i>{{ ord.created_by.username }}</td>
+                                <td class="small">
+                                    {% for item in ord.items.all %}
+                                        <span class="badge bg-light text-dark border">{{ item.product.name }} × {{ item.quantity }} шт</span>
+                                    {% empty %}
+                                        <span class="text-muted">—</span>
+                                    {% endfor %}
+                                </td>
+                                <td><strong class="text-primary">{{ ord.total_amount|floatformat:2 }} грн</strong></td>
+                                <td><span class="badge bg-success-subtle text-success">{{ ord.get_status_display|default:ord.status }}</span></td>
+                                <td>
+                                    {% if ord.stock_deducted %}
+                                        <span class="badge bg-primary-subtle text-primary">Так</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary-subtle text-secondary">Ні</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center py-4 text-muted">Замовлень поки немає.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+
+<div class="modal fade" id="addMedModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header bg-primary text-white p-3">
+                <h5 class="modal-title fw-bold text-white"><i class="bi bi-plus-circle me-1"></i> Додати препарат на склад</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'pharmacy:warehouse_add_product' %}">
+                {% csrf_token %}
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Назва препарату</label>
+                        <input type="text" name="name" class="form-control" placeholder="наприклад: Парацетамол" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Категорія</label>
+                        <select name="category" class="form-select">
+                            {% for c in categories %}
+                            <option value="{{ c.id }}">{{ c.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Кількість (шт)</label>
+                            <input type="number" name="amount" class="form-control" placeholder="100" min="0" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Ціна (грн)</label>
+                            <input type="number" step="0.50" name="price" class="form-control" value="65.00" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Термін придатності (дд.мм.рррр)</label>
+                        <input type="text" name="date" class="form-control" placeholder="31.12.2028" required>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="rx_required" id="rxCheck">
+                        <label class="form-check-label small" for="rxCheck">
+                            Відпуск виключно за рецептом лікаря (Rx)
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer p-3 bg-light">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Скасувати</button>
+                    <button type="submit" class="btn btn-primary btn-sm px-4">Зберегти</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editMedModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header bg-dark text-white p-3">
+                <h5 class="modal-title fw-bold text-white"><i class="bi bi-pencil-square me-1"></i> Редагувати препарат</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'pharmacy:warehouse_edit_product' %}">
+                {% csrf_token %}
+                <input type="hidden" name="medicine_id" id="editMedId">
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Назва препарату</label>
+                        <input type="text" name="name" id="editMedName" class="form-control" required>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Кількість (шт)</label>
+                            <input type="number" name="amount" id="editMedAmount" class="form-control" min="0" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Ціна (грн)</label>
+                            <input type="number" step="0.50" name="price" id="editMedPrice" class="form-control" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Термін придатності (дд.мм.рррр)</label>
+                        <input type="text" name="date" id="editMedDate" class="form-control" required>
+                    </div>
+                </div>
+                <div class="modal-footer p-3 bg-light">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Скасувати</button>
+                    <button type="submit" class="btn btn-dark btn-sm px-4">Зберегти зміни</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="sellMedModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header bg-primary text-white p-3">
+                <h5 class="modal-title fw-bold text-white"><i class="bi bi-cart-dash me-1"></i> Складський продаж препарату</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'pharmacy:warehouse_sell_product' %}">
+                {% csrf_token %}
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Назва препарату</label>
+                        <input type="text" name="name" id="sellMedName" list="medList" class="form-control" placeholder="Почніть вводити назву..." oninput="updateSellModalPrice()" required>
+                        <datalist id="medList">
+                            {% for m in medicines %}
+                            <option value="{{ m.name }}" data-price="{{ m.price }}" data-stock="{{ m.total_stock }}">Ціна: {{ m.price }} грн | Залишок: {{ m.total_stock }} шт</option>
+                            {% endfor %}
+                        </datalist>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Кількість (шт)</label>
+                        <input type="number" name="amount" id="sellMedAmount" class="form-control" value="1" min="1" oninput="updateSellModalPrice()" required>
+                    </div>
+                    <div class="p-3 bg-light rounded-3 border mb-2">
+                        <div class="d-flex justify-content-between small text-muted mb-1">
+                            <span>Ціна за 1 од:</span>
+                            <span class="fw-semibold text-dark"><span id="sellMedUnitPrice">0.00</span> грн</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="fw-bold text-secondary small">Разом до сплати:</span>
+                            <h5 class="fw-bold text-primary mb-0"><span id="sellMedTotalPrice">0.00</span> грн</h5>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer p-3 bg-light">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Скасувати</button>
+                    <button type="submit" class="btn btn-primary btn-sm px-4">Продати</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="returnMedModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header bg-success text-white p-3">
+                <h5 class="modal-title fw-bold text-white"><i class="bi bi-arrow-return-left me-1"></i> Повернення препарату</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'pharmacy:warehouse_return_product' %}">
+                {% csrf_token %}
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Назва препарату</label>
+                        <input type="text" name="name" list="medList" class="form-control" placeholder="Введіть назву..." required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Кількість для повернення (шт)</label>
+                        <input type="number" name="amount" class="form-control" value="1" min="1" required>
+                    </div>
+                </div>
+                <div class="modal-footer p-3 bg-light">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Скасувати</button>
+                    <button type="submit" class="btn btn-success btn-sm px-4">Оформити повернення</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="deleteExpiredModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header bg-danger text-white p-3">
+                <h5 class="modal-title fw-bold text-white"><i class="bi bi-trash3 me-1"></i> Списання прострочених ліків</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'pharmacy:warehouse_delete_expired' %}">
+                {% csrf_token %}
+                <div class="modal-body p-4">
+                    <p class="mb-3">
+                        Ця дія автоматично знайде всі партії препаратів, термін придатності яких закінчився станом на сьогодні, спише їх залишки до 0 та зафіксує операцію в журналі руху.
+                    </p>
+                    <div class="alert alert-warning py-2 small d-flex align-items-center gap-2">
+                        <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+                        <div>Знайдено прострочених партій: <strong>{{ expired_count }}</strong></div>
+                    </div>
+                </div>
+                <div class="modal-footer p-3 bg-light">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Скасувати</button>
+                    <button type="submit" class="btn btn-danger btn-sm px-4">Підтвердити списання</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openEditModal(id, name, amount, date, price) {
+        document.getElementById('editMedId').value = id;
+        document.getElementById('editMedName').value = name;
+        document.getElementById('editMedAmount').value = amount;
+        document.getElementById('editMedDate').value = date;
+        document.getElementById('editMedPrice').value = price;
+
+        const modal = new bootstrap.Modal(document.getElementById('editMedModal'));
+        modal.show();
+    }
+
+    function filterTable() {
+        const query = document.getElementById('tableSearch').value.toLowerCase();
+        const rows = document.querySelectorAll('#stockTable tbody tr');
+        let visibleCount = 0;
+
+        rows.forEach(row => {
+            const text = row.innerText.toLowerCase();
+            if (text.includes(query)) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        document.getElementById('rowCount').innerText = visibleCount;
+    }
+
+    function updateSellModalPrice() {
+        const nameInput = document.getElementById('sellMedName');
+        const amountInput = document.getElementById('sellMedAmount');
+        const unitPriceElem = document.getElementById('sellMedUnitPrice');
+        const totalPriceElem = document.getElementById('sellMedTotalPrice');
+
+        const val = (nameInput.value || '').trim().toLowerCase();
+        const options = document.querySelectorAll('#medList option');
+        let matchedPrice = 0;
+
+        options.forEach(opt => {
+            if (opt.value.trim().toLowerCase() === val) {
+                matchedPrice = parseFloat(opt.getAttribute('data-price')) || 0;
+            }
+        });
+
+        const qty = parseInt(amountInput.value) || 0;
+        const total = matchedPrice * qty;
+
+        unitPriceElem.innerText = matchedPrice.toFixed(2);
+        totalPriceElem.innerText = total.toFixed(2);
+    }
+</script>
+{% endblock %}

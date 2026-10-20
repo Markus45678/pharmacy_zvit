@@ -1,0 +1,454 @@
+{% extends "pharmacy/base.html" %}
+
+{% block title %}Робоче місце фармацевта | PharmManager{% endblock %}
+
+{% block extra_css %}
+<style>
+    .cat-pill {
+        border-radius: 20px;
+        padding: 8px 16px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+        border: 1px solid var(--border-color);
+        background: #FFFFFF;
+        color: var(--text-main);
+        transition: all 0.2s ease;
+    }
+    .cat-pill:hover, .cat-pill.active {
+        background-color: var(--primary);
+        color: #FFFFFF;
+        border-color: var(--primary);
+        box-shadow: 0 4px 10px rgba(0, 83, 155, 0.25);
+    }
+    .med-card {
+        border-radius: 14px;
+        overflow: hidden;
+        border: 1px solid var(--border-color);
+        background: #FFFFFF;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+    .med-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+    }
+    .med-card.disabled {
+        opacity: 0.6;
+        filter: grayscale(40%);
+    }
+    .med-header {
+        height: 100px;
+        background: #E8F0F9;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .med-icon-circle {
+        width: 52px;
+        height: 52px;
+        border-radius: 12px;
+        background: #FFFFFF;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+    }
+    .history-drawer {
+        width: 380px !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-lg-4 py-4">
+
+    <div class="card card-custom p-3 mb-4">
+        <form method="get" class="row g-3 align-items-center">
+            <input type="hidden" name="cat" value="{{ selected_cat }}">
+
+            <div class="col-md-5 col-lg-4">
+                <div class="input-group">
+                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                    <input type="text" name="q" value="{{ search_query }}" class="form-control border-start-0 ps-0" placeholder="Пошук за назвою або симптомом...">
+                    {% if search_query %}
+                    <a href="?cat={{ selected_cat }}&rx={{ rx_filter }}&stock={{ stock_filter }}" class="btn btn-outline-secondary"><i class="bi bi-x"></i></a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="col-sm-6 col-md-3 col-lg-2">
+                <select name="rx" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="all" {% if rx_filter == 'all' %}selected{% endif %}>Всі типи відпуску</option>
+                    <option value="otc" {% if rx_filter == 'otc' %}selected{% endif %}>Без рецепту</option>
+                    <option value="rx" {% if rx_filter == 'rx' %}selected{% endif %}>За рецептом (Rx)</option>
+                </select>
+            </div>
+
+            <div class="col-sm-6 col-md-3 col-lg-2">
+                <select name="stock" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="all" {% if stock_filter == 'all' %}selected{% endif %}>Всі залишки</option>
+                    <option value="in" {% if stock_filter == 'in' %}selected{% endif %}>В наявності</option>
+                    <option value="low" {% if stock_filter == 'low' %}selected{% endif %}>Закінчуються (< 5)</option>
+                    <option value="none" {% if stock_filter == 'none' %}selected{% endif %}>Немає в наявності</option>
+                </select>
+            </div>
+
+            <div class="col-auto ms-auto d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm px-3 rounded-pill">
+                    <i class="bi bi-funnel me-1"></i> Застосувати
+                </button>
+                <button type="button" class="btn btn-outline-dark btn-sm rounded-pill px-3" data-bs-toggle="offcanvas" data-bs-target="#historyOffcanvas">
+                    <i class="bi bi-clock-history me-1"></i> Історія продажів
+                    <span class="badge bg-danger rounded-pill ms-1">{{ recent_sales|length }}</span>
+                </button>
+            </div>
+        </form>
+
+        <div class="d-flex gap-2 overflow-x-auto pt-3 pb-1 border-top mt-3">
+            <a href="?cat=all&q={{ search_query }}&rx={{ rx_filter }}&stock={{ stock_filter }}" class="cat-pill {% if selected_cat == 'all' or not selected_cat %}active{% endif %}">
+                <i class="bi bi-grid"></i> Всі категорії
+            </a>
+            {% for cat in categories %}
+            <a href="?cat={{ cat.id }}&q={{ search_query }}&rx={{ rx_filter }}&stock={{ stock_filter }}" class="cat-pill {% if selected_cat == cat.id|stringformat:'s' %}active{% endif %}">
+                <i class="bi {{ cat.icon }}"></i> {{ cat.name }}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="fw-bold mb-0 text-dark">
+            <i class="bi bi-capsule-pill text-primary me-2"></i>Вітрина медикаментів
+            <span class="badge bg-light text-muted border ms-2">{{ medicines|length }} позицій</span>
+        </h5>
+    </div>
+
+    <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 g-3 mb-4">
+        {% for med in medicines %}
+        <div class="col">
+            <div class="med-card {% if med.total_stock == 0 %}disabled{% endif %}">
+                
+                <div class="med-header" style="background-color: {{ med.category.bg_color|default:'#E8F0F9' }};">
+                    <div class="med-icon-circle">
+                        <i class="bi {{ med.category.icon|default:'bi-capsule' }} fs-4" style="color: {{ med.category.color|default:'#00539B' }};"></i>
+                    </div>
+
+                    <span class="badge position-absolute top-0 end-0 m-2" style="background-color: #FFFFFF; color: {{ med.category.color|default:'#00539B' }}; border: 1px solid rgba(0,0,0,0.08); font-size: 0.65rem;">
+                        {{ med.category.name }}
+                    </span>
+
+                    <span class="badge position-absolute bottom-0 start-0 m-2" style="{% if med.rx_required %}background-color: #F8D7DA; color: #DC3545;{% else %}background-color: #D4EDDA; color: #155724;{% endif %} font-size: 0.65rem;">
+                        {% if med.rx_required %}За рецептом{% else %}Без рецепту{% endif %}
+                    </span>
+                </div>
+
+                <div class="p-3 d-flex flex-column flex-grow-1">
+                    <h6 class="fw-bold text-dark text-truncate mb-1" title="{{ med.name }}">{{ med.name }}</h6>
+                    <div class="small text-muted mb-2">{{ med.dosage_form }} &bull; <strong class="text-primary">{{ med.price|floatformat:2 }} грн</strong></div>
+
+                    <div class="mb-2">
+                        {% if med.total_stock == 0 %}
+                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle badge-pill-custom">
+                                Немає в наявності
+                            </span>
+                        {% elif med.total_stock < 5 %}
+                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle badge-pill-custom">
+                                Закінчується: {{ med.total_stock }} шт
+                            </span>
+                        {% else %}
+                            <span class="badge bg-success-subtle text-success border border-success-subtle badge-pill-custom">
+                                В наявності: {{ med.total_stock }} шт
+                            </span>
+                        {% endif %}
+                    </div>
+
+                    <div class="small text-muted mb-3 d-flex align-items-center gap-1">
+                        <i class="bi bi-calendar-event"></i>
+                        <span>до {{ med.earliest_expiry|date:"d.m.Y"|default:"не вказано" }}</span>
+                    </div>
+
+                    <div class="mt-auto">
+                        {% if med.total_stock > 0 %}
+                        <button type="button" class="btn btn-accent w-100 btn-sm rounded-3 py-2 d-flex align-items-center justify-content-center gap-2"
+                                onclick="openMedModal('{{ med.id }}', '{{ med.name|escapejs }}', '{{ med.category.name|escapejs }}', '{{ med.category.icon|escapejs }}', '{{ med.price|floatformat:2 }}', '{{ med.total_stock }}', '{{ med.earliest_expiry|date:"d.m.Y"|default:"" }}', {{ med.rx_required|yesno:"true,false" }}, '{{ med.description|escapejs }}', '{{ med.instruction|escapejs }}', '{{ med.warning|escapejs }}')">
+                            <i class="bi bi-cart-plus"></i> Продати
+                        </button>
+                        {% else %}
+                        <button type="button" class="btn btn-light w-100 btn-sm rounded-3 py-2 text-muted" disabled>
+                            <i class="bi bi-x-circle"></i> Немає в наявності
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12 text-center py-5">
+            <div class="text-muted">
+                <i class="bi bi-search fs-1 d-block mb-3 opacity-50"></i>
+                <h5>Нічого не знайдено за вашим запитом</h5>
+                <p class="small">Спробуйте змінити фільтри категорій або пошукове слово.</p>
+                <a href="{% url 'pharmacy:pharmacist_catalog' %}" class="btn btn-outline-primary btn-sm rounded-pill mt-2">Скинути всі фільтри</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+</div>
+
+<div class="modal fade" id="medModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            
+            <div class="modal-header bg-primary text-white p-4">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-3 bg-white bg-opacity-20 p-2 text-white fs-3 d-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">
+                        <i id="mModalIcon" class="bi bi-capsule"></i>
+                    </div>
+                    <div>
+                        <h4 class="modal-title fw-bold text-white mb-0" id="mModalName">Препарат</h4>
+                        <div class="d-flex align-items-center gap-2 mt-1">
+                            <span class="badge bg-white bg-opacity-25 text-white" id="mModalCat">Категорія</span>
+                            <span class="badge" id="mModalRxBadge">Відпуск</span>
+                            <span class="small text-white-50"><i class="bi bi-calendar-event me-1"></i>до <span id="mModalDate">--</span></span>
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body p-4">
+                <div class="row g-4">
+                    <div class="col-lg-7">
+                        <div class="mb-3">
+                            <h6 class="fw-bold text-secondary text-uppercase small"><i class="bi bi-info-circle me-1 text-primary"></i> Про препарат</h6>
+                            <div class="p-3 bg-light rounded-3 small text-dark" id="mModalDesc">Опис відсутній.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <h6 class="fw-bold text-secondary text-uppercase small"><i class="bi bi-clipboard2-pulse me-1 text-primary"></i> Спосіб застосування та дозування</h6>
+                            <div class="p-3 bg-light rounded-3 small text-dark" id="mModalInstr">Інструкція відсутня.</div>
+                        </div>
+
+                        <div class="mb-2">
+                            <h6 class="fw-bold text-warning-emphasis text-uppercase small"><i class="bi bi-exclamation-triangle-fill me-1 text-warning"></i> Застереження</h6>
+                            <div class="p-3 bg-warning-subtle text-warning-emphasis rounded-3 small border border-warning-subtle" id="mModalWarn">
+                                Перед застосуванням проконсультуйтеся з лікарем.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-5">
+                        <div class="card card-custom p-3 bg-light border">
+                            <h6 class="fw-bold text-dark mb-3"><i class="bi bi-cart-check text-success me-1"></i> Оформлення продажу</h6>
+
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="text-muted small">Ціна за 1 од:</span>
+                                <strong class="text-dark"><span id="mModalPrice">0.00</span> грн</strong>
+                            </div>
+
+                            <div class="d-flex justify-content-between mb-3">
+                                <span class="text-muted small">В наявності:</span>
+                                <span class="badge bg-success-subtle text-success" id="mModalStock">0 шт</span>
+                            </div>
+
+                            <form method="post" action="{% url 'pharmacy:pharmacist_sell' %}" id="saleForm">
+                                {% csrf_token %}
+                                <input type="hidden" name="medicine_id" id="mModalId">
+
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-secondary">Кількість для продажу:</label>
+                                    <div class="input-group">
+                                        <button type="button" class="btn btn-outline-secondary" onclick="stepQty(-1)"><i class="bi bi-dash"></i></button>
+                                        <input type="number" name="quantity" id="mModalQty" class="form-control text-center fw-bold fs-5" value="1" min="1" max="1000" oninput="calcTotal()">
+                                        <button type="button" class="btn btn-outline-secondary" onclick="stepQty(1)"><i class="bi bi-plus"></i></button>
+                                    </div>
+                                </div>
+
+                                <div id="prescriptionWarning" class="alert alert-danger py-3 px-3 small d-flex align-items-center gap-2 mb-3 fw-bold border-danger d-none" role="alert">
+                                    <i class="bi bi-exclamation-octagon-fill fs-5"></i>
+                                    <span>Перевірте рецепт лікаря</span>
+                                </div>
+
+                                <div class="p-3 bg-white rounded-3 border mb-3">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold text-muted small">Разом до сплати:</span>
+                                        <h4 class="fw-bold text-primary mb-0"><span id="mModalTotal">0.00</span> грн</h4>
+                                    </div>
+                                </div>
+
+                                <button type="submit" class="btn btn-accent w-100 py-3 rounded-3 fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2">
+                                    <i class="bi bi-check2-circle fs-5"></i> Підтвердити продаж
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="prescriptionConfirmModal" tabindex="-1" aria-labelledby="prescriptionConfirmTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content border-0 shadow rounded-4 overflow-hidden">
+            <div class="modal-header bg-danger text-white p-3">
+                <h5 class="modal-title fw-bold text-white" id="prescriptionConfirmTitle">
+                    <i class="bi bi-exclamation-octagon-fill me-1"></i> Увага
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Закрити"></button>
+            </div>
+            <div class="modal-body text-center p-4">
+                <i class="bi bi-file-earmark-medical-fill text-danger" style="font-size: 3rem;"></i>
+                <h5 class="fw-bold text-danger mt-3 mb-2">ПЕРЕВІРТЕ РЕЦЕПТ</h5>
+                <p class="small text-muted mb-0">Препарат відпускається тільки за рецептом лікаря.</p>
+            </div>
+            <div class="modal-footer border-0 bg-light justify-content-center p-3">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Скасувати</button>
+                <button type="button" class="btn btn-danger px-4 fw-bold" id="prescriptionCheckedButton">
+                    <i class="bi bi-check2-circle me-1"></i> Перевірив
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="offcanvas offcanvas-end history-drawer" tabindex="-1" id="historyOffcanvas">
+    <div class="offcanvas-header bg-dark text-white p-3">
+        <h5 class="offcanvas-title fw-bold text-white d-flex align-items-center gap-2">
+            <i class="bi bi-clock-history text-warning"></i> Історія продажів
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
+    </div>
+    <div class="offcanvas-body p-3">
+        <div class="small text-muted mb-3">Останні проведені чеки через касу:</div>
+
+        <div class="d-flex flex-column gap-2">
+            {% for item in recent_sales %}
+            <div class="card card-custom p-3 border">
+                <div class="d-flex justify-content-between align-items-start mb-1">
+                    <strong class="text-dark">{{ item.medicine.name }}</strong>
+                    <span class="badge bg-danger-subtle text-danger fw-bold">-{{ item.quantity }} шт</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center small text-muted">
+                    <span><i class="bi bi-receipt me-1"></i>{{ item.sale.receipt_number|truncatechars:18 }}</span>
+                    <strong class="text-primary">{{ item.subtotal|floatformat:2 }} грн</strong>
+                </div>
+                <div class="small text-muted text-end mt-1" style="font-size: 0.72rem;">
+                    {{ item.sale.created_at|date:"d.m.Y H:i:s" }}
+                </div>
+            </div>
+            {% empty %}
+            <div class="text-center text-muted py-5">
+                <i class="bi bi-receipt fs-1 d-block mb-2 opacity-50"></i>
+                <p>Історія продажів порожня.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentPrice = 0;
+    let maxStock = 1;
+    let isPrescriptionOnly = false;
+    let awaitingPrescriptionConfirmation = false;
+    const saleForm = document.getElementById('saleForm');
+
+    function modalInstance(id) {
+        return bootstrap.Modal.getOrCreateInstance(document.getElementById(id));
+    }
+
+    function openMedModal(id, name, cat, icon, price, stock, date, requiresPrescription, desc, instr, warn) {
+        document.getElementById('mModalId').value = id;
+        document.getElementById('mModalName').innerText = name;
+        document.getElementById('mModalCat').innerText = cat;
+        document.getElementById('mModalIcon').className = 'bi ' + (icon || 'bi-capsule');
+        document.getElementById('mModalDate').innerText = date || 'Безстроково';
+        
+        currentPrice = parseFloat(price) || 0;
+        maxStock = parseInt(stock) || 1;
+        
+        document.getElementById('mModalPrice').innerText = currentPrice.toFixed(2);
+        document.getElementById('mModalStock').innerText = maxStock + ' шт';
+
+        const rxBadge = document.getElementById('mModalRxBadge');
+        isPrescriptionOnly = requiresPrescription === true;
+        awaitingPrescriptionConfirmation = false;
+        delete saleForm.dataset.prescriptionConfirmed;
+        if (isPrescriptionOnly) {
+            rxBadge.className = 'badge bg-danger text-white';
+            rxBadge.innerText = 'За рецептом';
+        } else {
+            rxBadge.className = 'badge bg-success text-white';
+            rxBadge.innerText = 'Без рецепту';
+        }
+
+        document.getElementById('mModalDesc').innerText = desc || 'Опис відсутній.';
+        document.getElementById('mModalInstr').innerText = instr || 'Приймати за призначенням лікаря.';
+        document.getElementById('mModalWarn').innerText = warn || 'Протипоказання уточнюйте у лікаря.';
+
+        const qtyInput = document.getElementById('mModalQty');
+        qtyInput.value = 1;
+        qtyInput.max = maxStock;
+        document.getElementById('prescriptionWarning').classList.toggle('d-none', !isPrescriptionOnly);
+        calcTotal();
+
+        modalInstance('medModal').show();
+    }
+
+    function stepQty(delta) {
+        const input = document.getElementById('mModalQty');
+        let val = parseInt(input.value) || 1;
+        val += delta;
+        if (val < 1) val = 1;
+        if (val > maxStock) val = maxStock;
+        input.value = val;
+        calcTotal();
+    }
+
+    function calcTotal() {
+        const input = document.getElementById('mModalQty');
+        let val = parseInt(input.value) || 1;
+        if (val < 1) val = 1;
+        if (val > maxStock) val = maxStock;
+        const total = val * currentPrice;
+        document.getElementById('mModalTotal').innerText = total.toFixed(2);
+    }
+
+    saleForm.addEventListener('submit', function (event) {
+        if (isPrescriptionOnly && saleForm.dataset.prescriptionConfirmed !== 'true') {
+            event.preventDefault();
+            awaitingPrescriptionConfirmation = true;
+            document.getElementById('medModal').addEventListener('hidden.bs.modal', function showPrescriptionConfirmation() {
+                modalInstance('prescriptionConfirmModal').show();
+            }, {once: true});
+            modalInstance('medModal').hide();
+        }
+    });
+
+    document.getElementById('prescriptionCheckedButton').addEventListener('click', function () {
+        saleForm.dataset.prescriptionConfirmed = 'true';
+        awaitingPrescriptionConfirmation = false;
+        modalInstance('prescriptionConfirmModal').hide();
+        saleForm.requestSubmit();
+    });
+
+    document.getElementById('prescriptionConfirmModal').addEventListener('hidden.bs.modal', function () {
+        if (awaitingPrescriptionConfirmation) {
+            awaitingPrescriptionConfirmation = false;
+            modalInstance('medModal').show();
+        }
+    });
+</script>
+{% endblock %}
