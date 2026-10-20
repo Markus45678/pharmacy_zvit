@@ -1,0 +1,2 @@
+{% extends 'pharmacy/base.html' %}
+{% block content %}<div class="container py-4"><h1 class="h3">Мої продажі</h1><div class="list-group">{% for order in orders %}<a class="list-group-item list-group-item-action" href="{% url 'pharmacy:order_detail' order.pk %}">{{ order.receipt_number }} · {{ order.total_amount }} грн · {{ order.get_status_display }}</a>{% empty %}<p class="text-muted">Продажів ще немає.</p>{% endfor %}</div>{% include 'pharmacy/includes/pagination.html' %}</div>{% endblock %}
